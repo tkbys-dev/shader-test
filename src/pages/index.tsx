@@ -1,118 +1,261 @@
-import Image from 'next/image'
-import { Inter } from 'next/font/google'
+import { Stage, Graphics, useTick } from "@pixi/react";
+import * as PIXI from "pixi.js";
+import { defaultFilterVertex } from "@pixi/core";
+import {
+  useWindowSize,
+  useWindowWidth,
+  useWindowHeight,
+} from "@react-hook/window-size";
+import Vert from "../shaders/vert.glsl";
+import Frag from "../shaders/frag.glsl";
 
-const inter = Inter({ subsets: ['latin'] })
+let whirls: number[] = [];
+// let whirlCount = 10;
+
+const vs = `
+// vert file and comments from adam ferriss
+// https://github.com/aferriss/p5jsShaderExamples
+
+// our vertex data
+uniform vec3 aPosition;
+varying vec2 aTexCoord;
+
+// lets get texcoords just for fun!
+varying vec2 vTexCoord;
+
+void main() {
+  // copy the texcoords
+  vTexCoord = aTexCoord;
+
+  // copy the position data into a vec4, using 1.0 as the w component
+  vec4 positionVec4 = vec4(aPosition, 1.0);
+  positionVec4.xy = positionVec4.xy * 2.0 - 1.0;
+
+  // send the vertex information on to the fragment shader
+  gl_Position = positionVec4;
+}
+`;
+
+const fs = `
+#ifdef GL_ES
+	precision mediump float;
+	#endif
+
+  #define PI 3.141592653589793
+  #define TAU 6.283185307179586
+
+	uniform vec2 u_resolution;
+	uniform vec2 u_mouse;
+	uniform float u_time;
+	uniform sampler2D tex0;
+	uniform vec4 whirls[10];
+
+	varying vec2 vTexCoord;
+
+#define pow2(x) (x * x)
+
+const int samples = 8;
+const float sigma = float(samples) * 0.25;
+
+float gaussian(vec2 i) {
+    return 1.0 / (2.0 * PI * pow2(sigma)) * exp(-((pow2(i.x) + pow2(i.y)) / (2.0 * pow2(sigma))));
+}
+
+vec3 blur(sampler2D sp, vec2 uv, vec2 scale) {
+    vec3 col = vec3(0.0);
+    float accum = 0.0;
+    float weight;
+    vec2 offset;
+
+    for (int x = -samples / 2; x < samples / 2; ++x) {
+        for (int y = -samples / 2; y < samples / 2; ++y) {
+            offset = vec2(x, y);
+            weight = gaussian(offset);
+            col += texture2D(sp, uv + scale * offset).rgb * weight;
+            accum += weight;
+        }
+    }
+
+    return col / accum;
+}
+
+
+	float rand(vec2 c){
+		return fract(sin(dot(c.xy ,vec2(12.9898,78.233))) * 43758.5453);
+	}
+
+	//	Classic Perlin 3D Noise
+	//	by Stefan Gustavson
+	//
+	vec4 permute(vec4 x){return mod(((x*34.0)+1.0)*x, 289.0);}
+	vec4 taylorInvSqrt(vec4 r){return 1.79284291400159 - 0.85373472095314 * r;}
+	vec3 fade(vec3 t) {return t*t*t*(t*(t*6.0-15.0)+10.0);}
+
+	float cnoise(vec3 P){
+		vec3 Pi0 = floor(P); // Integer part for indexing
+		vec3 Pi1 = Pi0 + vec3(1.0); // Integer part + 1
+		Pi0 = mod(Pi0, 289.0);
+		Pi1 = mod(Pi1, 289.0);
+		vec3 Pf0 = fract(P); // Fractional part for interpolation
+		vec3 Pf1 = Pf0 - vec3(1.0); // Fractional part - 1.0
+		vec4 ix = vec4(Pi0.x, Pi1.x, Pi0.x, Pi1.x);
+		vec4 iy = vec4(Pi0.yy, Pi1.yy);
+		vec4 iz0 = Pi0.zzzz;
+		vec4 iz1 = Pi1.zzzz;
+
+		vec4 ixy = permute(permute(ix) + iy);
+		vec4 ixy0 = permute(ixy + iz0);
+		vec4 ixy1 = permute(ixy + iz1);
+
+		vec4 gx0 = ixy0 / 7.0;
+		vec4 gy0 = fract(floor(gx0) / 7.0) - 0.5;
+		gx0 = fract(gx0);
+		vec4 gz0 = vec4(0.5) - abs(gx0) - abs(gy0);
+		vec4 sz0 = step(gz0, vec4(0.0));
+		gx0 -= sz0 * (step(0.0, gx0) - 0.5);
+		gy0 -= sz0 * (step(0.0, gy0) - 0.5);
+
+		vec4 gx1 = ixy1 / 7.0;
+		vec4 gy1 = fract(floor(gx1) / 7.0) - 0.5;
+		gx1 = fract(gx1);
+		vec4 gz1 = vec4(0.5) - abs(gx1) - abs(gy1);
+		vec4 sz1 = step(gz1, vec4(0.0));
+		gx1 -= sz1 * (step(0.0, gx1) - 0.5);
+		gy1 -= sz1 * (step(0.0, gy1) - 0.5);
+
+		vec3 g000 = vec3(gx0.x,gy0.x,gz0.x);
+		vec3 g100 = vec3(gx0.y,gy0.y,gz0.y);
+		vec3 g010 = vec3(gx0.z,gy0.z,gz0.z);
+		vec3 g110 = vec3(gx0.w,gy0.w,gz0.w);
+		vec3 g001 = vec3(gx1.x,gy1.x,gz1.x);
+		vec3 g101 = vec3(gx1.y,gy1.y,gz1.y);
+		vec3 g011 = vec3(gx1.z,gy1.z,gz1.z);
+		vec3 g111 = vec3(gx1.w,gy1.w,gz1.w);
+
+		vec4 norm0 = taylorInvSqrt(vec4(dot(g000, g000), dot(g010, g010), dot(g100, g100), dot(g110, g110)));
+		g000 *= norm0.x;
+		g010 *= norm0.y;
+		g100 *= norm0.z;
+		g110 *= norm0.w;
+		vec4 norm1 = taylorInvSqrt(vec4(dot(g001, g001), dot(g011, g011), dot(g101, g101), dot(g111, g111)));
+		g001 *= norm1.x;
+		g011 *= norm1.y;
+		g101 *= norm1.z;
+		g111 *= norm1.w;
+
+		float n000 = dot(g000, Pf0);
+		float n100 = dot(g100, vec3(Pf1.x, Pf0.yz));
+		float n010 = dot(g010, vec3(Pf0.x, Pf1.y, Pf0.z));
+		float n110 = dot(g110, vec3(Pf1.xy, Pf0.z));
+		float n001 = dot(g001, vec3(Pf0.xy, Pf1.z));
+		float n101 = dot(g101, vec3(Pf1.x, Pf0.y, Pf1.z));
+		float n011 = dot(g011, vec3(Pf0.x, Pf1.yz));
+		float n111 = dot(g111, Pf1);
+
+		vec3 fade_xyz = fade(Pf0);
+		vec4 n_z = mix(vec4(n000, n100, n010, n110), vec4(n001, n101, n011, n111), fade_xyz.z);
+		vec2 n_yz = mix(n_z.xy, n_z.zw, fade_xyz.y);
+		float n_xyz = mix(n_yz.x, n_yz.y, fade_xyz.x);
+		return 2.2 * n_xyz;
+	}
+
+
+	void main(){
+
+		vec2 st = vTexCoord;
+
+
+		// st+=cnoise(vec3(st*1.,u_time/50.))/100.;
+		// st+=cnoise(vec3(st*2.,u_time/10.))/100.;
+		// st+=cnoise(vec3(st*5.,u_time/10.))/100.;
+		st.x *=u_resolution.x/u_resolution.y;
+		st.y= 1.-st.y;
+
+		for(int i=0;i<10;i++){
+		  vec2 delta = st-whirls[i].xy;
+			float d = length(delta);
+			float ang = atan(delta.y,delta.x);
+
+			//modify and distort radius (distance to center);
+			float dr = (1.-smoothstep(0.,whirls[i].w,d))*(-1.+sin(d*5.+u_time+float(i)))*(0.5+cos(d*40.+u_time+float(i)))/2.;
+			d+=dr;
+
+
+			  // d+=cnoise(vec3(st*5.,u_time/200.))/50.;
+			   ang+=cnoise(vec3(st*5.,u_time/200.))/30.;
+			// ang+=sin(d*3.)/2.;
+			d+=sin(ang*2.)/5.;
+
+			//modify and distort angle (angle to center);
+			float dAng = (1.-smoothstep(0.,whirls[i].w,d))*( (10.) *whirls[i].z)/2. ;
+			ang += dAng;
+
+			vec2 np = whirls[i].xy + d*vec2(cos(ang),sin(ang));
+
+			st = np;
+		}
+
+		st+=cnoise(vec3(st*1.,0.));
+
+		// vec3 color = vec3(st.x+st.y/2.,st.y+ sin(st.y)/2.,st.y);
+
+		vec2 f_st = fract(st*1.);
+		vec2 i_st = floor(st*1.);
+
+		vec3 color = vec3(sin(st.x*1.),sin(st.x*1.5),sin(st.x*2.));
+		// vec3 color = vec3(st.x/4.+st.y*2.,st.y/2.+sin(st.x/2.),st.x*st.y*3.);
+		// vec3 color = vec3(cnoise(vec3(st*1.,u_time/5.)),
+										 // cnoise(vec3(st*1.,u_time/5.)),
+										 // cnoise(vec3(st*1.,u_time/5.)));
+		// color+=cnoise(vec3(st*10.,1.0))+0.5;
+
+		gl_FragColor= vec4(color,1.0);
+	}
+`;
+
+interface ISize {
+  width: number;
+  height: number;
+}
+
+const Sample = ({ width, height }: ISize) => {
+  // const [shader, setShader] = useState<PIXI.Filter[]>([
+  //   new PIXI.Filter(defaultFilterVertex, Frag, {
+  //     uResolution: [400, 400],
+  //     uTime: test,
+  //   }),
+  // ]);
+
+  const shader = [
+    new PIXI.Filter(defaultFilterVertex, Frag, {
+      uResolution: [width * 2, height * 2],
+      uTime: 0.1,
+    }),
+  ];
+
+  useTick((time) => {
+    shader[0].uniforms.uTime += time * 0.01;
+  });
+
+  return (
+    <Graphics
+      draw={(graphics) => {
+        graphics.clear();
+        graphics.beginFill(0x000000);
+        graphics.drawRect(0, 0, width, height);
+        graphics.endFill();
+      }}
+      filters={shader}
+    />
+  );
+};
 
 export default function Home() {
+  const w = useWindowWidth();
+  const h = useWindowHeight();
   return (
-    <main
-      className={`flex min-h-screen flex-col items-center justify-between p-24 ${inter.className}`}
-    >
-      <div className="z-10 max-w-5xl w-full items-center justify-between font-mono text-sm lg:flex">
-        <p className="fixed left-0 top-0 flex w-full justify-center border-b border-gray-300 bg-gradient-to-b from-zinc-200 pb-6 pt-8 backdrop-blur-2xl dark:border-neutral-800 dark:bg-zinc-800/30 dark:from-inherit lg:static lg:w-auto  lg:rounded-xl lg:border lg:bg-gray-200 lg:p-4 lg:dark:bg-zinc-800/30">
-          Get started by editing&nbsp;
-          <code className="font-mono font-bold">src/pages/index.tsx</code>
-        </p>
-        <div className="fixed bottom-0 left-0 flex h-48 w-full items-end justify-center bg-gradient-to-t from-white via-white dark:from-black dark:via-black lg:static lg:h-auto lg:w-auto lg:bg-none">
-          <a
-            className="pointer-events-none flex place-items-center gap-2 p-8 lg:pointer-events-auto lg:p-0"
-            href="https://vercel.com?utm_source=create-next-app&utm_medium=default-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            By{' '}
-            <Image
-              src="/vercel.svg"
-              alt="Vercel Logo"
-              className="dark:invert"
-              width={100}
-              height={24}
-              priority
-            />
-          </a>
-        </div>
-      </div>
-
-      <div className="relative flex place-items-center before:absolute before:h-[300px] before:w-[480px] before:-translate-x-1/2 before:rounded-full before:bg-gradient-radial before:from-white before:to-transparent before:blur-2xl before:content-[''] after:absolute after:-z-20 after:h-[180px] after:w-[240px] after:translate-x-1/3 after:bg-gradient-conic after:from-sky-200 after:via-blue-200 after:blur-2xl after:content-[''] before:dark:bg-gradient-to-br before:dark:from-transparent before:dark:to-blue-700/10 after:dark:from-sky-900 after:dark:via-[#0141ff]/40 before:lg:h-[360px]">
-        <Image
-          className="relative dark:drop-shadow-[0_0_0.3rem_#ffffff70] dark:invert"
-          src="/next.svg"
-          alt="Next.js Logo"
-          width={180}
-          height={37}
-          priority
-        />
-      </div>
-
-      <div className="mb-32 grid text-center lg:max-w-5xl lg:w-full lg:mb-0 lg:grid-cols-4 lg:text-left">
-        <a
-          href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=default-template-tw&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className={`mb-3 text-2xl font-semibold`}>
-            Docs{' '}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className={`m-0 max-w-[30ch] text-sm opacity-50`}>
-            Find in-depth information about Next.js features and API.
-          </p>
-        </a>
-
-        <a
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=default-template-tw&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className={`mb-3 text-2xl font-semibold`}>
-            Learn{' '}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className={`m-0 max-w-[30ch] text-sm opacity-50`}>
-            Learn about Next.js in an interactive course with&nbsp;quizzes!
-          </p>
-        </a>
-
-        <a
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=default-template-tw&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className={`mb-3 text-2xl font-semibold`}>
-            Templates{' '}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className={`m-0 max-w-[30ch] text-sm opacity-50`}>
-            Discover and deploy boilerplate example Next.js&nbsp;projects.
-          </p>
-        </a>
-
-        <a
-          href="https://vercel.com/new?utm_source=create-next-app&utm_medium=default-template-tw&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className={`mb-3 text-2xl font-semibold`}>
-            Deploy{' '}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className={`m-0 max-w-[30ch] text-sm opacity-50`}>
-            Instantly deploy your Next.js site to a shareable URL with Vercel.
-          </p>
-        </a>
-      </div>
-    </main>
-  )
+    <Stage width={w} height={h}>
+      <Sample width={w} height={h} />
+    </Stage>
+  );
 }
