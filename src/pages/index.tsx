@@ -12,6 +12,8 @@ import Fragment3 from "@/shaders/fragment/fragment3.glsl";
 import Fragment4 from "@/shaders/fragment/fragment4.glsl";
 import Fragment5 from "@/shaders/fragment/fragment5.glsl";
 import Fragment6 from "@/shaders/fragment/fragment6.glsl";
+import Fragment7 from "@/shaders/fragment/fragment7.glsl";
+import Fragment8 from "@/shaders/fragment/fragment8.glsl";
 
 interface ISize {
   width: number;
@@ -49,10 +51,25 @@ const Sample = ({ width, height }: ISize) => {
       uTime: 0.1,
     }),
   ];
+
   const shader6 = [
     new PIXI.Filter(defaultFilterVertex, Fragment6, {
       uResolution: [width * 1.1, height * 1.1],
       uTime: 0.1,
+    }),
+  ];
+
+  const shader7 = [
+    new PIXI.Filter(defaultFilterVertex, Fragment7, {
+      uResolution: [100, 100],
+      uTime: 0.1,
+    }),
+  ];
+
+  const shader8 = [
+    new PIXI.Filter(defaultFilterVertex, Fragment8, {
+      uResolution: [width * 1.2, height * 1.2],
+      uTime: 0.8,
     }),
   ];
 
@@ -61,6 +78,8 @@ const Sample = ({ width, height }: ISize) => {
     shader4[0].uniforms.uTime += time * 0.00001;
     shader5[0].uniforms.uTime += time * 0.01;
     shader6[0].uniforms.uTime += time * 0.01;
+    shader7[0].uniforms.uTime += time * 0.01;
+    shader8[0].uniforms.uTime += time * 0.01;
   });
 
   return (
@@ -71,7 +90,7 @@ const Sample = ({ width, height }: ISize) => {
         graphics.drawRect(0, 0, width, height);
         graphics.endFill();
       }}
-      filters={shader6}
+      filters={shader8}
     />
   );
 };
