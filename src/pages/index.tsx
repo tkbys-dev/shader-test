@@ -27,6 +27,8 @@ const Sample = ({ width, height }: ISize) => {
     new PIXI.Filter(defaultFilterVertex, Fragment3, {
       uResolution: [width * 2, height * 2],
       uTime: 0.1,
+      uFrame: 1,
+      uMouse: [1, 1, 1],
     }),
   ];
 
@@ -42,7 +44,7 @@ const Sample = ({ width, height }: ISize) => {
         graphics.drawRect(0, 0, width, height);
         graphics.endFill();
       }}
-      filters={shader2}
+      filters={shader3}
     />
   );
 };
