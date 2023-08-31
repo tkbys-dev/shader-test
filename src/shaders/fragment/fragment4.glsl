@@ -101,4 +101,3 @@ void main() {
     colorVec = pow(colorVec,vec3(_Gamma));
     gl_FragColor = vec4(_Brightness * colorVec * colorVec,1.0);
 }
-
