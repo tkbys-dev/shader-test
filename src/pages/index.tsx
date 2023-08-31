@@ -11,6 +11,7 @@ import Fragment2 from "@/shaders/fragment/fragment2.glsl";
 import Fragment3 from "@/shaders/fragment/fragment3.glsl";
 import Fragment4 from "@/shaders/fragment/fragment4.glsl";
 import Fragment5 from "@/shaders/fragment/fragment5.glsl";
+import Fragment6 from "@/shaders/fragment/fragment6.glsl";
 
 interface ISize {
   width: number;
@@ -48,13 +49,18 @@ const Sample = ({ width, height }: ISize) => {
       uTime: 0.1,
     }),
   ];
-
-  console.log(shader4[0]);
+  const shader6 = [
+    new PIXI.Filter(defaultFilterVertex, Fragment6, {
+      uResolution: [width * 1.1, height * 1.1],
+      uTime: 0.1,
+    }),
+  ];
 
   useTick((time) => {
     shader2[0].uniforms.uTime += time * 0.01;
     shader4[0].uniforms.uTime += time * 0.00001;
     shader5[0].uniforms.uTime += time * 0.01;
+    shader6[0].uniforms.uTime += time * 0.01;
   });
 
   return (
@@ -65,7 +71,7 @@ const Sample = ({ width, height }: ISize) => {
         graphics.drawRect(0, 0, width, height);
         graphics.endFill();
       }}
-      filters={shader5}
+      filters={shader6}
     />
   );
 };

@@ -27,5 +27,6 @@ void main(void) {
 	P.z -= uTime;
 	// gl_FragColor += mix(1., 1. - c / 150., exp(-dot(P, P) * .03));
 	gl_FragColor += mix(1., 1. * c / 150., exp(dot(P, P) * .01));
-	gl_FragColor.a = 1.;
+	gl_FragColor.a =  1.;
+	// gl_FragColor =  vec4(colorB, 1.);
 }
